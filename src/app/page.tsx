@@ -16,6 +16,7 @@ export default function TribFaucet() {
   const [error, setError] = useState("")
   const [success, setSuccess] = useState(false)
   const [timeRemaining, setTimeRemaining] = useState<string | null>(null)
+  const [transactionHash, setTransactionHash] = useState<string | null>(null)
 
   useEffect(() => {
     checkClaimCooldown()
@@ -23,8 +24,33 @@ export default function TribFaucet() {
     return () => clearInterval(interval)
   }, [])
 
+  const fetchAddress = async (address: string) => {
+    const end_point = process.env.NEXT_PUBLIC_FAUCET_ENDPOINT as string;
+    
+    try {
+      const response = await fetch(end_point, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        mode: 'cors',
+        credentials: 'include',
+        body: JSON.stringify({ address }),
+      });
 
-  
+      if (!response.ok) {
+        throw new Error("Transaction error");
+      }
+
+      const data = await response.json();
+      return data.hash;
+    } catch (error) {
+      console.error('Error:', error);
+      throw error;
+    }
+  }
+
   const checkClaimCooldown = () => {
     const lastClaim = localStorage.getItem("lastClaimTime")
     if (lastClaim) {
@@ -63,17 +89,15 @@ export default function TribFaucet() {
     setLoading(true)
     setError("")
     setSuccess(false)
+    setTransactionHash(null)
 
     try {
-      const response = await fetch(`/api/claim?address=${address}`)
-      const data = await response.json()
-
-      if (!response.ok) throw new Error(data.message || "Claim failed")
-
+      const hash = await fetchAddress(address)
+      setTransactionHash(hash)
       localStorage.setItem("lastClaimTime", Date.now().toString())
       setSuccess(true)
       toast.success("Tokens claimed!", {
-        description: "Check your wallet for the [redacted] tokens.",
+        description: "Transaction has been submitted. It may take a few minutes to process.",
       })
     } catch (err) {
       const message = err instanceof Error ? err.message : "Failed to process claim"
@@ -91,7 +115,7 @@ export default function TribFaucet() {
       <Toaster position="top-center" expand={true} richColors />
       <Card className="w-full max-w-md shadow-lg">
         <CardHeader>
-          <CardTitle className="text-2xl text-center text-blue-900">Claim TRIB Tokens</CardTitle>
+          <CardTitle className="text-2xl text-center text-blue-900">Claim [redacted] Tokens</CardTitle>
         </CardHeader>
         <CardContent className="space-y-6">
           <form onSubmit={handleClaim} className="space-y-4">
@@ -132,7 +156,21 @@ export default function TribFaucet() {
 
           {success && (
             <Alert className="bg-green-50 border-green-200 text-green-600">
-              <AlertDescription>Tokens have been sent to your wallet!</AlertDescription>
+              <AlertDescription>
+                Tokens have been sent to your wallet!
+                {transactionHash && (
+                  <div className="mt-2">
+                    <a
+                      href={`https://sepolia.arbiscan.io/tx/${transactionHash}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-blue-600 hover:text-blue-800 underline"
+                    >
+                      View transaction on Arbiscan
+                    </a>
+                  </div>
+                )}
+              </AlertDescription>
             </Alert>
           )}
 
@@ -144,4 +182,3 @@ export default function TribFaucet() {
     </div>
   )
 }
-
